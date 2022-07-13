@@ -1,11 +1,39 @@
-import { App, Stack, StackProps } from 'aws-cdk-lib';
-import { Construct } from 'constructs';
+import { join } from "path";
+import {
+  App,
+  Stack,
+  StackProps,
+  aws_lambda as lambda,
+  Duration,
+} from "aws-cdk-lib";
+import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
+import { Code, Runtime } from "aws-cdk-lib/aws-lambda";
+import { Construct } from "constructs";
+import { AwsCliV2Layer } from "./lib/awscliv2-layer";
 
-export class MyStack extends Stack {
+export class AwsCliFromCdkStack extends Stack {
   constructor(scope: Construct, id: string, props: StackProps = {}) {
     super(scope, id, props);
 
-    // define resources here...
+    const func = new lambda.Function(this, "ExampleFunc", {
+      runtime: Runtime.PROVIDED_AL2,
+      timeout: Duration.minutes(1),
+      handler: "function.handler",
+      code: Code.fromAsset(join(__dirname, "handler")),
+      initialPolicy: [
+        new PolicyStatement({
+          actions: ["s3:ListAllMyBuckets", "s3:ListBucket"],
+          resources: ["*"],
+          effect: Effect.ALLOW,
+        }),
+      ],
+    });
+
+    const bootstrap = new lambda.LayerVersion(this, "Bootstrap", {
+      code: Code.fromAsset(join(__dirname, "runtime")),
+    });
+
+    func.addLayers(bootstrap, new AwsCliV2Layer(this, "AwsCliV2"));
   }
 }
 
@@ -17,7 +45,7 @@ const devEnv = {
 
 const app = new App();
 
-new MyStack(app, 'aws-cli-from-cdk-dev', { env: devEnv });
-// new MyStack(app, 'aws-cli-from-cdk-prod', { env: prodEnv });
+new AwsCliFromCdkStack(app, "AwsCliFromCdkStack", { env: devEnv });
+// new AwsCliFromCdkStack(app, 'aws-cli-from-cdk-prod', { env: prodEnv });
 
 app.synth();
